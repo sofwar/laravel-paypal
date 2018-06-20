@@ -85,11 +85,21 @@ class ExpressCheckout
      */
     protected function setExpressCheckoutRecurringPaymentConfig($data, $subscription = false)
     {
-        $this->post = $this->post->merge([
-            'L_BILLINGTYPE0'                 => ($subscription) ? 'RecurringPayments' : 'MerchantInitiatedBilling',
-            'L_BILLINGAGREEMENTDESCRIPTION0' => !empty($data['subscription_desc']) ?
-                $data['subscription_desc'] : $data['invoice_description'],
-        ]);
+        $billingType = $this->billingType;
+
+        // Overwrite billing type if $subscription flag is enabled
+        if ($subscription) {
+            $billingType = 'RecurringPayments';
+        }
+
+        // Send L_BILLINGTYPE0 and L_BILLINGAGREEMENTDESCRIPTION0 only if there is billing type
+        if (isset($billingType)) {
+            $this->post = $this->post->merge([
+                'L_BILLINGTYPE0'                 => $billingType,
+                'L_BILLINGAGREEMENTDESCRIPTION0' => !empty($data['subscription_desc']) ?
+                    $data['subscription_desc'] : $data['invoice_description'],
+            ]);
+        }
     }
 
     /**
@@ -112,6 +122,25 @@ class ExpressCheckout
         if (isset($data['shipping'])) {
             $this->post = $this->post->merge([
                 'PAYMENTREQUEST_0_SHIPPINGAMT' => $data['shipping'],
+            ]);
+        }
+    }
+
+    /**
+     * Set shipping discount if available.
+     *
+     * @param array $data
+     */
+    protected function setShippingDiscount($data)
+    {
+        if (isset($data['shipping_discount'])) {
+            if ($data['shipping_discount'] > 0) {
+                $data['shipping_discount'] *= -1;
+            }
+
+            $this->post = $this->post->merge([
+                'PAYMENTREQUEST_0_SHIPDISCAMT' => $data['shipping_discount'],
+                'PAYMENTREQUEST_0_AMT'         => round($data['total'] + $data['shipping_discount'], 2),
             ]);
         }
     }
@@ -144,6 +173,8 @@ class ExpressCheckout
         ]);
 
         $this->setShippingAmount($data);
+
+        $this->setShippingDiscount($data);
 
         $this->setExpressCheckoutRecurringPaymentConfig($data, $subscription);
 
